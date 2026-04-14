@@ -1,0 +1,48 @@
+{
+  "name": "n8n-nodes-velix",
+  "version": "0.1.1",
+  "description": "n8n community node for the Velix WhatsApp API",
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "whatsapp",
+    "velix"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Paulo Linder"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/paulolinder/velix-n8n.git"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc && gulp build:icons",
+    "dev": "tsc --watch",
+    "lint": "eslint src/ --ext .ts",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/VelixApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Velix/Velix.node.js",
+      "dist/nodes/Velix/VelixTrigger.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "gulp": "^5.0.0",
+    "n8n-workflow": "^1.0.0",
+    "typescript": "^5.7.0"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
+}
