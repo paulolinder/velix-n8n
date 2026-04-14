@@ -1,5 +1,7 @@
 import {
 	IExecuteFunctions,
+	IHttpRequestMethods,
+	IHttpRequestOptions,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
@@ -234,6 +236,8 @@ export class Velix implements INodeType {
 			},
 
 			// ── Message: To (JID) ─────────────────────────────
+			// Hidden for operations that don't target a specific recipient.
+			// Note: 'revoke' needs 'to' (chat JID) — intentionally NOT in the hide list.
 			{
 				displayName: 'To (JID)',
 				name: 'to',
@@ -241,10 +245,10 @@ export class Velix implements INodeType {
 				required: true,
 				default: '',
 				placeholder: '5511999990001@s.whatsapp.net',
-				description: 'Recipient JID (phone@s.whatsapp.net or group@g.us)',
+				description: 'Recipient JID (phone@s.whatsapp.net or group@g.us). For Revoke, enter the chat JID where the message lives.',
 				displayOptions: {
 					show: { resource: ['message'] },
-					hide: { operation: ['list', 'search', 'listScheduled', 'cancelScheduled', 'revoke'] },
+					hide: { operation: ['list', 'search', 'listScheduled', 'cancelScheduled'] },
 				},
 			},
 			{
@@ -273,12 +277,12 @@ export class Velix implements INodeType {
 				displayOptions: { show: { resource: ['message'], operation: ['sendMedia'] } },
 			},
 			{
-				displayName: 'Media URL or Base64',
+				displayName: 'Media (Base64)',
 				name: 'mediaData',
 				type: 'string',
 				required: true,
 				default: '',
-				description: 'Public URL or base64-encoded file data',
+				description: 'Base64-encoded file content',
 				displayOptions: { show: { resource: ['message'], operation: ['sendMedia'] } },
 			},
 			{
@@ -339,7 +343,7 @@ export class Velix implements INodeType {
 				displayOptions: { show: { resource: ['message'], operation: ['sendContact'] } },
 			},
 
-			// ── Message: Reaction ─────────────────────────────
+			// ── Message: Reaction / Read / Revoke ────────────
 			{
 				displayName: 'Message ID',
 				name: 'messageId',
@@ -478,262 +482,280 @@ export class Velix implements INodeType {
 		const baseUrl = (credentials.baseUrl as string).replace(/\/$/, '');
 		const apiKey = credentials.apiKey as string;
 
+		// Default MIME types derived from the media type selector.
+		const mimeTypeMap: Record<string, string> = {
+			image:    'image/jpeg',
+			video:    'video/mp4',
+			audio:    'audio/ogg; codecs=opus',
+			document: 'application/octet-stream',
+			sticker:  'image/webp',
+		};
+
 		for (let i = 0; i < items.length; i++) {
 			try {
-			const resource = this.getNodeParameter('resource', i) as string;
-			const operation = this.getNodeParameter('operation', i) as string;
+				const resource = this.getNodeParameter('resource', i) as string;
+				const operation = this.getNodeParameter('operation', i) as string;
 
-			let method = 'GET';
-			let endpoint = '';
-			let body: Record<string, unknown> | undefined;
+				let method: IHttpRequestMethods = 'GET';
+				let endpoint = '';
+				let body: Record<string, unknown> | undefined;
 
-			const instId = () => this.getNodeParameter('instanceId', i) as string;
+				const instId = () => this.getNodeParameter('instanceId', i) as string;
 
-			const safeJsonParse = (val: string, fieldName: string): Record<string, unknown> => {
-				try { return JSON.parse(val); }
-				catch { throw new NodeOperationError(this.getNode(), `Invalid JSON in "${fieldName}"`, { itemIndex: i }); }
-			};
-
-			// ── Instance ──────────────────────────────────
-			if (resource === 'instance') {
-				switch (operation) {
-					case 'list':
-						endpoint = '/instances';
-						break;
-					case 'get':
-						endpoint = `/instances/${instId()}`;
-						break;
-					case 'create':
-						method = 'POST';
-						endpoint = '/instances';
-						body = { name: this.getNodeParameter('instanceName', i) };
-						break;
-					case 'delete':
-						method = 'DELETE';
-						endpoint = `/instances/${instId()}`;
-						break;
-					case 'connect':
-						method = 'POST';
-						endpoint = `/instances/${instId()}/connect`;
-						break;
-					case 'disconnect':
-						method = 'POST';
-						endpoint = `/instances/${instId()}/disconnect`;
-						break;
-					case 'logout':
-						method = 'POST';
-						endpoint = `/instances/${instId()}/logout`;
-						break;
-					case 'getStatus':
-						endpoint = `/instances/${instId()}/status`;
-						break;
-					case 'pairCode':
-						method = 'POST';
-						endpoint = `/instances/${instId()}/pair-code`;
-						body = { phone: this.getNodeParameter('pairPhone', i) };
-						break;
-					case 'getSettings':
-						endpoint = `/instances/${instId()}/settings`;
-						break;
-					case 'updateSettings':
-						method = 'PATCH';
-						endpoint = `/instances/${instId()}/settings`;
-						body = safeJsonParse(this.getNodeParameter('settingsJson', i) as string, 'Settings (JSON)');
-						break;
-					case 'setPresence':
-						method = 'POST';
-						endpoint = `/instances/${instId()}/presence`;
-						body = {
-							chat: this.getNodeParameter('presenceChat', i),
-							type: this.getNodeParameter('presenceType', i),
-						};
-						break;
-					case 'updateProfile':
-						method = 'PATCH';
-						endpoint = `/instances/${instId()}/profile`;
-						body = { name: this.getNodeParameter('profileName', i) || undefined };
-						break;
+				// ── Instance ──────────────────────────────────
+				if (resource === 'instance') {
+					switch (operation) {
+						case 'list':
+							endpoint = '/instances';
+							break;
+						case 'get':
+							endpoint = `/instances/${instId()}`;
+							break;
+						case 'create':
+							method = 'POST';
+							endpoint = '/instances';
+							body = { name: this.getNodeParameter('instanceName', i) };
+							break;
+						case 'delete':
+							method = 'DELETE';
+							endpoint = `/instances/${instId()}`;
+							break;
+						case 'connect':
+							method = 'POST';
+							endpoint = `/instances/${instId()}/connect`;
+							break;
+						case 'disconnect':
+							method = 'POST';
+							endpoint = `/instances/${instId()}/disconnect`;
+							break;
+						case 'logout':
+							method = 'POST';
+							endpoint = `/instances/${instId()}/logout`;
+							break;
+						case 'getStatus':
+							endpoint = `/instances/${instId()}/status`;
+							break;
+						case 'pairCode':
+							method = 'POST';
+							endpoint = `/instances/${instId()}/pair-code`;
+							body = { phone: this.getNodeParameter('pairPhone', i) };
+							break;
+						case 'getSettings':
+							endpoint = `/instances/${instId()}/settings`;
+							break;
+						case 'updateSettings':
+							method = 'PATCH';
+							endpoint = `/instances/${instId()}/settings`;
+							// FIX: type:'json' params are already parsed — never call JSON.parse again
+							body = this.getNodeParameter('settingsJson', i) as Record<string, unknown>;
+							break;
+						case 'setPresence':
+							method = 'POST';
+							endpoint = `/instances/${instId()}/presence`;
+							body = {
+								chat: this.getNodeParameter('presenceChat', i),
+								type: this.getNodeParameter('presenceType', i),
+							};
+							break;
+						case 'updateProfile':
+							method = 'PATCH';
+							endpoint = `/instances/${instId()}/profile`;
+							body = { name: this.getNodeParameter('profileName', i) || undefined };
+							break;
+					}
 				}
-			}
 
-			// ── Message ───────────────────────────────────
-			if (resource === 'message') {
-				const id = instId();
-				switch (operation) {
-					case 'sendText':
-						method = 'POST';
-						endpoint = `/instances/${id}/messages/text`;
-						body = {
-							to: this.getNodeParameter('to', i),
-							text: this.getNodeParameter('text', i),
-						};
-						break;
-					case 'sendMedia':
-						method = 'POST';
-						endpoint = `/instances/${id}/messages/media`;
-						body = {
-							to: this.getNodeParameter('to', i),
-							type: this.getNodeParameter('mediaType', i),
-							data: this.getNodeParameter('mediaData', i),
-							caption: this.getNodeParameter('caption', i) || undefined,
-							file_name: this.getNodeParameter('fileName', i) || undefined,
-						};
-						break;
-					case 'sendLocation':
-						method = 'POST';
-						endpoint = `/instances/${id}/messages/location`;
-						body = {
-							to: this.getNodeParameter('to', i),
-							latitude: this.getNodeParameter('latitude', i),
-							longitude: this.getNodeParameter('longitude', i),
-							name: this.getNodeParameter('locationName', i) || undefined,
-						};
-						break;
-					case 'sendContact':
-						method = 'POST';
-						endpoint = `/instances/${id}/messages/contact`;
-						body = {
-							to: this.getNodeParameter('to', i),
-							contacts: [{
-								display_name: this.getNodeParameter('contactName', i),
-								phone: this.getNodeParameter('contactPhone', i),
-							}],
-						};
-						break;
-					case 'sendReaction':
-						method = 'POST';
-						endpoint = `/instances/${id}/messages/reaction`;
-						body = {
-							to: this.getNodeParameter('to', i),
-							message_id: this.getNodeParameter('messageId', i),
-							emoji: this.getNodeParameter('emoji', i),
-						};
-						break;
-					case 'sendPoll':
-						method = 'POST';
-						endpoint = `/instances/${id}/messages/poll`;
-						body = {
-							to: this.getNodeParameter('to', i),
-							question: this.getNodeParameter('question', i),
-							options: (this.getNodeParameter('pollOptions', i) as string).split(',').map(s => s.trim()),
-						};
-						break;
-					case 'sendBatch':
-						method = 'POST';
-						endpoint = `/instances/${id}/messages/batch`;
-						body = { messages: safeJsonParse(this.getNodeParameter('batchMessages', i) as string, 'Messages (JSON)') };
-						break;
-					case 'markRead':
-						method = 'POST';
-						endpoint = `/instances/${id}/messages/read`;
-						body = {
-							chat: this.getNodeParameter('to', i),
-							message_ids: [this.getNodeParameter('messageId', i)],
-						};
-						break;
-					case 'list':
-						endpoint = `/instances/${id}/messages?chat=${encodeURIComponent(this.getNodeParameter('chatJid', i) as string)}`;
-						break;
-					case 'search':
-						endpoint = `/instances/${id}/messages/search?q=${encodeURIComponent(this.getNodeParameter('searchQuery', i) as string)}`;
-						break;
-					case 'listScheduled':
-						endpoint = `/instances/${id}/messages/scheduled`;
-						break;
-					case 'cancelScheduled':
-						method = 'DELETE';
-						endpoint = `/instances/${id}/messages/${encodeURIComponent(this.getNodeParameter('messageId', i) as string)}/schedule`;
-						break;
-					case 'revoke':
-						method = 'DELETE';
-						endpoint = `/instances/${id}/messages/${encodeURIComponent(this.getNodeParameter('messageId', i) as string)}`;
-						break;
+				// ── Message ───────────────────────────────────
+				if (resource === 'message') {
+					const id = instId();
+					switch (operation) {
+						case 'sendText':
+							method = 'POST';
+							endpoint = `/instances/${id}/messages/text`;
+							body = {
+								to:   this.getNodeParameter('to', i),
+								text: this.getNodeParameter('text', i),
+							};
+							break;
+						case 'sendMedia': {
+							const mediaType = this.getNodeParameter('mediaType', i) as string;
+							method = 'POST';
+							endpoint = `/instances/${id}/messages/media`;
+							body = {
+								to:        this.getNodeParameter('to', i),
+								type:      mediaType,
+								data:      this.getNodeParameter('mediaData', i),
+								// FIX: mime_type is required by the API; derived automatically from type
+								mime_type: mimeTypeMap[mediaType] ?? 'application/octet-stream',
+								caption:   this.getNodeParameter('caption', i) || undefined,
+								file_name: this.getNodeParameter('fileName', i) || undefined,
+							};
+							break;
+						}
+						case 'sendLocation':
+							method = 'POST';
+							endpoint = `/instances/${id}/messages/location`;
+							body = {
+								to:   this.getNodeParameter('to', i),
+								// FIX: API expects lat/lng, not latitude/longitude
+								lat:  this.getNodeParameter('latitude', i),
+								lng:  this.getNodeParameter('longitude', i),
+								name: this.getNodeParameter('locationName', i) || undefined,
+							};
+							break;
+						case 'sendContact':
+							method = 'POST';
+							endpoint = `/instances/${id}/messages/contact`;
+							body = {
+								to: this.getNodeParameter('to', i),
+								contacts: [{
+									// FIX: API expects 'name', not 'display_name'
+									name:  this.getNodeParameter('contactName', i),
+									phone: this.getNodeParameter('contactPhone', i),
+								}],
+							};
+							break;
+						case 'sendReaction':
+							method = 'POST';
+							endpoint = `/instances/${id}/messages/reaction`;
+							body = {
+								to:         this.getNodeParameter('to', i),
+								message_id: this.getNodeParameter('messageId', i),
+								// FIX: API field is 'reaction', not 'emoji'
+								reaction:   this.getNodeParameter('emoji', i),
+							};
+							break;
+						case 'sendPoll':
+							method = 'POST';
+							endpoint = `/instances/${id}/messages/poll`;
+							body = {
+								to:       this.getNodeParameter('to', i),
+								question: this.getNodeParameter('question', i),
+								options:  (this.getNodeParameter('pollOptions', i) as string).split(',').map(s => s.trim()),
+							};
+							break;
+						case 'sendBatch':
+							method = 'POST';
+							endpoint = `/instances/${id}/messages/batch`;
+							// FIX: type:'json' param is already parsed — never call JSON.parse again
+							body = { messages: this.getNodeParameter('batchMessages', i) };
+							break;
+						case 'markRead':
+							method = 'POST';
+							endpoint = `/instances/${id}/messages/read`;
+							body = {
+								chat:        this.getNodeParameter('to', i),
+								message_ids: [this.getNodeParameter('messageId', i)],
+							};
+							break;
+						case 'list':
+							endpoint = `/instances/${id}/messages?chat=${encodeURIComponent(this.getNodeParameter('chatJid', i) as string)}`;
+							break;
+						case 'search':
+							endpoint = `/instances/${id}/messages/search?q=${encodeURIComponent(this.getNodeParameter('searchQuery', i) as string)}`;
+							break;
+						case 'listScheduled':
+							endpoint = `/instances/${id}/messages/scheduled`;
+							break;
+						case 'cancelScheduled':
+							method = 'DELETE';
+							endpoint = `/instances/${id}/messages/scheduled/${encodeURIComponent(this.getNodeParameter('messageId', i) as string)}`;
+							break;
+						case 'revoke':
+							method = 'DELETE';
+							endpoint = `/instances/${id}/messages/${encodeURIComponent(this.getNodeParameter('messageId', i) as string)}`;
+							// FIX: API requires chat JID in the body to locate the message
+							body = { to: this.getNodeParameter('to', i) };
+							break;
+					}
 				}
-			}
 
-			// ── Contact ───────────────────────────────────
-			if (resource === 'contact') {
-				const id = instId();
-				switch (operation) {
-					case 'check':
-						method = 'POST';
-						endpoint = `/instances/${id}/contacts/check`;
-						body = {
-							phones: (this.getNodeParameter('phones', i) as string).split(',').map(s => s.trim()),
-						};
-						break;
-					case 'getInfo':
-						endpoint = `/instances/${id}/contacts/${encodeURIComponent(this.getNodeParameter('jid', i) as string)}`;
-						break;
-					case 'getPicture':
-						endpoint = `/instances/${id}/contacts/${encodeURIComponent(this.getNodeParameter('jid', i) as string)}/picture`;
-						break;
+				// ── Contact ───────────────────────────────────
+				if (resource === 'contact') {
+					const id = instId();
+					switch (operation) {
+						case 'check':
+							method = 'POST';
+							endpoint = `/instances/${id}/contacts/check`;
+							body = {
+								phones: (this.getNodeParameter('phones', i) as string).split(',').map(s => s.trim()),
+							};
+							break;
+						case 'getInfo':
+							endpoint = `/instances/${id}/contacts/${encodeURIComponent(this.getNodeParameter('jid', i) as string)}`;
+							break;
+						case 'getPicture':
+							endpoint = `/instances/${id}/contacts/${encodeURIComponent(this.getNodeParameter('jid', i) as string)}/picture`;
+							break;
+					}
 				}
-			}
 
-			// ── Group ─────────────────────────────────────
-			if (resource === 'group') {
-				const id = instId();
-				switch (operation) {
-					case 'list':
-						endpoint = `/instances/${id}/groups`;
-						break;
-					case 'create':
-						method = 'POST';
-						endpoint = `/instances/${id}/groups`;
-						body = {
-							name: this.getNodeParameter('groupName', i),
-							participants: (this.getNodeParameter('participants', i) as string).split(',').map(s => s.trim()),
-						};
-						break;
-					case 'getInfo':
-						endpoint = `/instances/${id}/groups/${encodeURIComponent(this.getNodeParameter('groupJid', i) as string)}`;
-						break;
-					case 'updateParticipants':
-						method = 'POST';
-						endpoint = `/instances/${id}/groups/${encodeURIComponent(this.getNodeParameter('groupJid', i) as string)}/participants`;
-						body = {
-							action: this.getNodeParameter('participantAction', i),
-							participants: (this.getNodeParameter('participants', i) as string).split(',').map(s => s.trim()),
-						};
-						break;
-					case 'leave':
-						method = 'DELETE';
-						endpoint = `/instances/${id}/groups/${encodeURIComponent(this.getNodeParameter('groupJid', i) as string)}/leave`;
-						break;
+				// ── Group ─────────────────────────────────────
+				if (resource === 'group') {
+					const id = instId();
+					switch (operation) {
+						case 'list':
+							endpoint = `/instances/${id}/groups`;
+							break;
+						case 'create':
+							method = 'POST';
+							endpoint = `/instances/${id}/groups`;
+							body = {
+								name:         this.getNodeParameter('groupName', i),
+								participants: (this.getNodeParameter('participants', i) as string).split(',').map(s => s.trim()),
+							};
+							break;
+						case 'getInfo':
+							endpoint = `/instances/${id}/groups/${encodeURIComponent(this.getNodeParameter('groupJid', i) as string)}`;
+							break;
+						case 'updateParticipants':
+							method = 'POST';
+							endpoint = `/instances/${id}/groups/${encodeURIComponent(this.getNodeParameter('groupJid', i) as string)}/participants`;
+							body = {
+								action:       this.getNodeParameter('participantAction', i),
+								participants: (this.getNodeParameter('participants', i) as string).split(',').map(s => s.trim()),
+							};
+							break;
+						case 'leave':
+							method = 'DELETE';
+							endpoint = `/instances/${id}/groups/${encodeURIComponent(this.getNodeParameter('groupJid', i) as string)}/leave`;
+							break;
+					}
 				}
-			}
 
-			// ── Chatwoot ──────────────────────────────────
-			if (resource === 'chatwoot') {
-				switch (operation) {
-					case 'syncHistory':
-						method = 'POST';
-						endpoint = `/instances/${instId()}/chatwoot/sync`;
-						break;
+				// ── Chatwoot ──────────────────────────────────
+				if (resource === 'chatwoot') {
+					switch (operation) {
+						case 'syncHistory':
+							method = 'POST';
+							endpoint = `/instances/${instId()}/chatwoot/sync`;
+							break;
+					}
 				}
-			}
 
-			// ── Execute request ───────────────────────────
-			const options: Record<string, unknown> = {
-				method,
-				url: `${baseUrl}/v1${endpoint}`,
-				headers: {
-					'X-API-Key': apiKey,
-					'Content-Type': 'application/json',
-				},
-				json: true,
-				returnFullResponse: false,
-			};
+				// ── Execute request ───────────────────────────
+				if (endpoint === '') {
+					throw new NodeOperationError(this.getNode(), `Unknown operation: ${resource}/${operation}`, { itemIndex: i });
+				}
 
-			if (body && (method === 'POST' || method === 'PATCH' || method === 'PUT' || method === 'DELETE')) {
-				options.body = body;
-			}
+				const options: IHttpRequestOptions = {
+					method,
+					url:     `${baseUrl}/v1${endpoint}`,
+					headers: { 'X-API-Key': apiKey },
+					json:    true,
+				};
 
-			const response = await this.helpers.httpRequest(options as any);
-			const data = response?.data !== undefined ? response.data : response;
+				if (body !== undefined) {
+					options.body = body as IHttpRequestOptions['body'];
+				}
 
-			returnData.push({ json: typeof data === 'object' && data !== null ? data : { result: data } });
+				const response = await this.helpers.httpRequest(options);
+
+				// FIX: httpRequest with json:true returns the parsed body directly — no .data wrapper
+				returnData.push({
+					json:        typeof response === 'object' && response !== null ? response as Record<string, unknown> : { result: response },
+					pairedItem: { item: i },
+				});
 
 			} catch (error) {
 				if (this.continueOnFail()) {

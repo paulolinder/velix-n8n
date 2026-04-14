@@ -1,0 +1,9 @@
+src/
+node_modules/
+tsconfig.json
+gulpfile.js
+.git/
+.gitignore
+*.ts
+!dist/**/*.js
+!dist/**/*.d.ts
