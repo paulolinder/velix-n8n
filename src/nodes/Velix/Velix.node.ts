@@ -1,4 +1,5 @@
 import {
+	IDataObject,
 	IExecuteFunctions,
 	IHttpRequestMethods,
 	IHttpRequestOptions,
@@ -752,10 +753,10 @@ export class Velix implements INodeType {
 				const response = await this.helpers.httpRequest(options);
 
 				// FIX: httpRequest with json:true returns the parsed body directly — no .data wrapper
-				returnData.push({
-					json:        typeof response === 'object' && response !== null ? response as Record<string, unknown> : { result: response },
-					pairedItem: { item: i },
-				});
+				const json = typeof response === 'object' && response !== null
+					? (response as IDataObject)
+					: ({ result: response } as IDataObject);
+				returnData.push({ json, pairedItem: { item: i } });
 
 			} catch (error) {
 				if (this.continueOnFail()) {
