@@ -554,7 +554,7 @@ export class Velix implements INodeType {
 							method = 'POST';
 							endpoint = `/instances/${instId()}/presence`;
 							body = {
-								chat: this.getNodeParameter('presenceChat', i),
+								to:   this.getNodeParameter('presenceChat', i),
 								type: this.getNodeParameter('presenceType', i),
 							};
 							break;
