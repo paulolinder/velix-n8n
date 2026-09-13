@@ -660,7 +660,7 @@ export class Velix implements INodeType {
 							break;
 						case 'cancelScheduled':
 							method = 'DELETE';
-							endpoint = `/instances/${id}/messages/scheduled/${encodeURIComponent(this.getNodeParameter('messageId', i) as string)}`;
+							endpoint = `/instances/${id}/messages/${encodeURIComponent(this.getNodeParameter('messageId', i) as string)}/schedule`;
 							break;
 						case 'revoke':
 							method = 'DELETE';
