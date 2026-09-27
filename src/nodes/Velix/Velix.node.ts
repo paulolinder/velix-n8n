@@ -250,7 +250,7 @@ export class Velix implements INodeType {
 				description: 'Recipient JID (phone@s.whatsapp.net or group@g.us). For Revoke, enter the chat JID where the message lives.',
 				displayOptions: {
 					show: { resource: ['message'] },
-					hide: { operation: ['list', 'search', 'listScheduled', 'cancelScheduled'] },
+					hide: { operation: ['list', 'search', 'requestHistory', 'listScheduled', 'cancelScheduled'] },
 				},
 			},
 			{
