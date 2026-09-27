@@ -35,10 +35,18 @@ Main node with 35 operations across 5 resources:
 | Resource | Operations |
 |---|---|
 | **Instance** | List, Get, Create, Delete, Connect, Disconnect, Logout, Get Status, Request Pair Code, Get Settings, Update Settings, Set Presence, Update Profile |
-| **Message** | Send Text, Send Media, Send Location, Send Contact, Send Reaction, Send Poll, Send Batch, Mark as Read, List, Search, List Scheduled, Cancel Scheduled, Revoke |
+| **Message** | Send Text, Send Media, Send Location, Send Contact, Send Reaction, Send Poll, Send Batch, Mark as Read, List (contacts or groups, with limit/offset), Search (with limit/offset), List Scheduled, Cancel Scheduled, Revoke |
 | **Contact** | Check WhatsApp, Get Info, Get Picture |
 | **Group** | List, Create, Get Info, Update Participants, Leave |
 | **Chatwoot** | Sync History |
+
+### Velix WhatsApp Tool
+
+Restricted node for AI Agents — the instance ID is fixed in the node config, and only safe operations are exposed:
+
+- Send Text, Send Image (URL), Send Reaction, Send Location, Send Contact
+- Set Presence (typing / recording / paused)
+- List Messages — read recent messages from a contact or group chat (`limit` / `offset`)
 
 ### Velix Trigger
 

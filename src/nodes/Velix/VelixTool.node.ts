@@ -18,7 +18,7 @@ export class VelixTool implements INodeType {
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"]}}',
-		description: 'Send WhatsApp messages via Velix API. Use this tool to send text messages, images, reactions, locations, and contacts through WhatsApp. The instance ID is pre-configured — you only need to provide the recipient and message content.',
+		description: 'Send and read WhatsApp messages via Velix API. Use this tool to send text messages, images, reactions, locations, and contacts through WhatsApp, and to read recent messages from a contact or group chat. The instance ID is pre-configured — you only need to provide the recipient and message content.',
 		defaults: { name: 'Velix WhatsApp Tool' },
 		usableAsTool: true,
 		inputs: [NodeConnectionTypes.Main],
@@ -83,6 +83,12 @@ export class VelixTool implements INodeType {
 						description: 'Show "typing..." or "recording audio..." indicator to a contact. Use this BEFORE sending a message for a natural experience.',
 						action: 'Show typing or recording indicator',
 					},
+					{
+						name: 'List Messages',
+						value: 'listMessages',
+						description: 'Read recent messages from a contact or group chat, newest first. Use this to get conversation context before replying.',
+						action: 'List recent messages from a WhatsApp chat',
+					},
 				],
 				default: 'sendText',
 				description: 'The action to perform. Most common: "sendText" to send a message, "setPresence" to show typing before sending.',
@@ -98,7 +104,7 @@ export class VelixTool implements INodeType {
 				placeholder: '5511999990001@s.whatsapp.net',
 				description: 'The WhatsApp ID of the recipient. For individual contacts, use the phone number (country code + number) followed by @s.whatsapp.net. Example: 5511999990001@s.whatsapp.net. For groups, use the group ID followed by @g.us. Example: 120363012345678901@g.us.',
 				displayOptions: {
-					hide: { operation: ['setPresence'] },
+					hide: { operation: ['setPresence', 'listMessages'] },
 				},
 			},
 
@@ -235,6 +241,36 @@ export class VelixTool implements INodeType {
 				description: 'What indicator to show. Use "typing" before sending a text, "recording" before sending audio, and "paused" to clear the indicator after sending.',
 				displayOptions: { show: { operation: ['setPresence'] } },
 			},
+
+			// ── List Messages fields ─────────────────────────
+			{
+				displayName: 'Chat JID',
+				name: 'listChat',
+				type: 'string',
+				required: true,
+				default: '',
+				placeholder: '120363012345678901@g.us',
+				description: 'The WhatsApp ID of the chat to read messages from. For individual contacts: phone@s.whatsapp.net (e.g. 5511999990001@s.whatsapp.net). For groups: groupid@g.us (e.g. 120363012345678901@g.us). In group messages, "from_jid" identifies which participant sent each message.',
+				displayOptions: { show: { operation: ['listMessages'] } },
+			},
+			{
+				displayName: 'Limit',
+				name: 'limit',
+				type: 'number',
+				typeOptions: { minValue: 1, maxValue: 100 },
+				default: 20,
+				description: 'How many messages to return (1-100). Use a small number like 10-20 for recent context.',
+				displayOptions: { show: { operation: ['listMessages'] } },
+			},
+			{
+				displayName: 'Offset',
+				name: 'offset',
+				type: 'number',
+				typeOptions: { minValue: 0 },
+				default: 0,
+				description: 'How many of the most recent messages to skip. Use 0 for the latest messages; increase it (e.g. by the previous limit) to page back through older messages.',
+				displayOptions: { show: { operation: ['listMessages'] } },
+			},
 		],
 	};
 
@@ -322,6 +358,12 @@ export class VelixTool implements INodeType {
 						};
 						break;
 
+					case 'listMessages':
+						method = 'GET';
+						endpoint = `/instances/${instanceId}/messages?chat=${encodeURIComponent(this.getNodeParameter('listChat', i) as string)}` +
+							`&limit=${this.getNodeParameter('limit', i, 20)}&offset=${this.getNodeParameter('offset', i, 0)}`;
+						break;
+
 					default:
 						throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, { itemIndex: i });
 				}
@@ -338,7 +380,10 @@ export class VelixTool implements INodeType {
 				}
 
 				const response = await this.helpers.httpRequest(options);
-				const json = typeof response === 'object' && response !== null
+				// List endpoints return a bare array — wrap it so the agent gets a named field.
+				const json = Array.isArray(response)
+					? ({ messages: response, count: response.length } as IDataObject)
+					: typeof response === 'object' && response !== null
 					? (response as IDataObject)
 					: ({ result: response } as IDataObject);
 				returnData.push({ json, pairedItem: { item: i } });

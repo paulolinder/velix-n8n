@@ -399,6 +399,8 @@ export class Velix implements INodeType {
 				type: 'string',
 				required: true,
 				default: '',
+				placeholder: '5511999990001@s.whatsapp.net',
+				description: 'Chat to list messages from. Contacts: phone@s.whatsapp.net. Groups: groupid@g.us.',
 				displayOptions: { show: { resource: ['message'], operation: ['list'] } },
 			},
 			{
@@ -408,6 +410,24 @@ export class Velix implements INodeType {
 				required: true,
 				default: '',
 				displayOptions: { show: { resource: ['message'], operation: ['search'] } },
+			},
+			{
+				displayName: 'Limit',
+				name: 'limit',
+				type: 'number',
+				typeOptions: { minValue: 1, maxValue: 100 },
+				default: 50,
+				description: 'Max number of messages to return (1-100)',
+				displayOptions: { show: { resource: ['message'], operation: ['list', 'search'] } },
+			},
+			{
+				displayName: 'Offset',
+				name: 'offset',
+				type: 'number',
+				typeOptions: { minValue: 0 },
+				default: 0,
+				description: 'Number of messages to skip, for pagination',
+				displayOptions: { show: { resource: ['message'], operation: ['list', 'search'] } },
 			},
 
 			// ── Contact: Check ────────────────────────────────
@@ -650,10 +670,12 @@ export class Velix implements INodeType {
 							};
 							break;
 						case 'list':
-							endpoint = `/instances/${id}/messages?chat=${encodeURIComponent(this.getNodeParameter('chatJid', i) as string)}`;
+							endpoint = `/instances/${id}/messages?chat=${encodeURIComponent(this.getNodeParameter('chatJid', i) as string)}` +
+								`&limit=${this.getNodeParameter('limit', i, 50)}&offset=${this.getNodeParameter('offset', i, 0)}`;
 							break;
 						case 'search':
-							endpoint = `/instances/${id}/messages/search?q=${encodeURIComponent(this.getNodeParameter('searchQuery', i) as string)}`;
+							endpoint = `/instances/${id}/messages/search?q=${encodeURIComponent(this.getNodeParameter('searchQuery', i) as string)}` +
+								`&limit=${this.getNodeParameter('limit', i, 50)}&offset=${this.getNodeParameter('offset', i, 0)}`;
 							break;
 						case 'listScheduled':
 							endpoint = `/instances/${id}/messages/scheduled`;
