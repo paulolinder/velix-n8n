@@ -35,7 +35,7 @@ Main node with 35 operations across 5 resources:
 | Resource | Operations |
 |---|---|
 | **Instance** | List, Get, Create, Delete, Connect, Disconnect, Logout, Get Status, Request Pair Code, Get Settings, Update Settings, Set Presence, Update Profile |
-| **Message** | Send Text, Send Media, Send Location, Send Contact, Send Reaction, Send Poll, Send Batch, Mark as Read, List (contacts or groups, with limit/offset), Search (with limit/offset), List Scheduled, Cancel Scheduled, Revoke |
+| **Message** | Send Text, Send Media, Send Location, Send Contact, Send Reaction, Send Poll, Send Batch, Mark as Read, List (contacts or groups, with limit/offset), Search (with limit/offset), Request History, List Scheduled, Cancel Scheduled, Revoke |
 | **Contact** | Check WhatsApp, Get Info, Get Picture |
 | **Group** | List, Create, Get Info, Update Participants, Leave |
 | **Chatwoot** | Sync History |
@@ -47,6 +47,17 @@ Restricted node for AI Agents — the instance ID is fixed in the node config, a
 - Send Text, Send Image (URL), Send Reaction, Send Location, Send Contact
 - Set Presence (typing / recording / paused)
 - List Messages — read recent messages from a contact or group chat (`limit` / `offset`)
+- Request History — ask WhatsApp for older messages of a chat (async; then use List Messages)
+
+### Pulling older chat history
+
+`Message > List` only returns messages Velix has stored. To import older ones (e.g. the last 100 of a group):
+
+1. **Message > Request History** with the chat JID and `Count = 100` (needs Velix API with `POST /messages/history`)
+2. Wait a few seconds (the phone answers asynchronously; it must be online)
+3. **Message > List** with `Limit = 100`
+
+Repeat step 1 to page further back. WhatsApp may return fewer messages than requested.
 
 ### Velix Trigger
 

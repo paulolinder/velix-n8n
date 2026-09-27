@@ -89,6 +89,12 @@ export class VelixTool implements INodeType {
 						description: 'Read recent messages from a contact or group chat, newest first. Use this to get conversation context before replying.',
 						action: 'List recent messages from a WhatsApp chat',
 					},
+					{
+						name: 'Request History',
+						value: 'requestHistory',
+						description: 'Ask WhatsApp for older messages of a contact or group chat that are not stored yet. Asynchronous: wait a few seconds, then use List Messages with a larger offset to read them.',
+						action: 'Request older messages for a WhatsApp chat',
+					},
 				],
 				default: 'sendText',
 				description: 'The action to perform. Most common: "sendText" to send a message, "setPresence" to show typing before sending.',
@@ -104,7 +110,7 @@ export class VelixTool implements INodeType {
 				placeholder: '5511999990001@s.whatsapp.net',
 				description: 'The WhatsApp ID of the recipient. For individual contacts, use the phone number (country code + number) followed by @s.whatsapp.net. Example: 5511999990001@s.whatsapp.net. For groups, use the group ID followed by @g.us. Example: 120363012345678901@g.us.',
 				displayOptions: {
-					hide: { operation: ['setPresence', 'listMessages'] },
+					hide: { operation: ['setPresence', 'listMessages', 'requestHistory'] },
 				},
 			},
 
@@ -250,8 +256,8 @@ export class VelixTool implements INodeType {
 				required: true,
 				default: '',
 				placeholder: '120363012345678901@g.us',
-				description: 'The WhatsApp ID of the chat to read messages from. For individual contacts: phone@s.whatsapp.net (e.g. 5511999990001@s.whatsapp.net). For groups: groupid@g.us (e.g. 120363012345678901@g.us). In group messages, "from_jid" identifies which participant sent each message.',
-				displayOptions: { show: { operation: ['listMessages'] } },
+				description: 'The WhatsApp ID of the chat. For individual contacts: phone@s.whatsapp.net (e.g. 5511999990001@s.whatsapp.net). For groups: groupid@g.us (e.g. 120363012345678901@g.us). In group messages, "from_jid" identifies which participant sent each message.',
+				displayOptions: { show: { operation: ['listMessages', 'requestHistory'] } },
 			},
 			{
 				displayName: 'Limit',
@@ -270,6 +276,15 @@ export class VelixTool implements INodeType {
 				default: 0,
 				description: 'How many of the most recent messages to skip. Use 0 for the latest messages; increase it (e.g. by the previous limit) to page back through older messages.',
 				displayOptions: { show: { operation: ['listMessages'] } },
+			},
+			{
+				displayName: 'Count',
+				name: 'historyCount',
+				type: 'number',
+				typeOptions: { minValue: 1, maxValue: 100 },
+				default: 50,
+				description: 'How many older messages to ask WhatsApp for (1-100). WhatsApp may return fewer.',
+				displayOptions: { show: { operation: ['requestHistory'] } },
 			},
 		],
 	};
@@ -364,6 +379,14 @@ export class VelixTool implements INodeType {
 							`&limit=${this.getNodeParameter('limit', i, 20)}&offset=${this.getNodeParameter('offset', i, 0)}`;
 						break;
 
+					case 'requestHistory':
+						endpoint = `/instances/${instanceId}/messages/history`;
+						body = {
+							chat: this.getNodeParameter('listChat', i),
+							count: this.getNodeParameter('historyCount', i, 50),
+						};
+						break;
+
 					default:
 						throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, { itemIndex: i });
 				}
@@ -380,9 +403,10 @@ export class VelixTool implements INodeType {
 				}
 
 				const response = await this.helpers.httpRequest(options);
-				// List endpoints return a bare array — wrap it so the agent gets a named field.
-				const json = Array.isArray(response)
-					? ({ messages: response, count: response.length } as IDataObject)
+				// The API wraps responses as { success, data, meta } — give the agent the list under a named field.
+				const data = (response as IDataObject | null)?.data;
+				const json = Array.isArray(data)
+					? ({ messages: data, count: data.length } as IDataObject)
 					: typeof response === 'object' && response !== null
 					? (response as IDataObject)
 					: ({ result: response } as IDataObject);

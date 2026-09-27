@@ -88,6 +88,7 @@ export class Velix implements INodeType {
 					{ name: 'Mark as Read', value: 'markRead', action: 'Mark messages as read' },
 					{ name: 'List', value: 'list', action: 'List messages for a chat' },
 					{ name: 'Search', value: 'search', action: 'Search messages' },
+					{ name: 'Request History', value: 'requestHistory', action: 'Request older messages for a chat' },
 					{ name: 'List Scheduled', value: 'listScheduled', action: 'List scheduled messages' },
 					{ name: 'Cancel Scheduled', value: 'cancelScheduled', action: 'Cancel a scheduled message' },
 					{ name: 'Revoke', value: 'revoke', action: 'Delete a sent message for everyone' },
@@ -400,8 +401,17 @@ export class Velix implements INodeType {
 				required: true,
 				default: '',
 				placeholder: '5511999990001@s.whatsapp.net',
-				description: 'Chat to list messages from. Contacts: phone@s.whatsapp.net. Groups: groupid@g.us.',
-				displayOptions: { show: { resource: ['message'], operation: ['list'] } },
+				description: 'Contacts: phone@s.whatsapp.net. Groups: groupid@g.us.',
+				displayOptions: { show: { resource: ['message'], operation: ['list', 'requestHistory'] } },
+			},
+			{
+				displayName: 'Count',
+				name: 'historyCount',
+				type: 'number',
+				typeOptions: { minValue: 1, maxValue: 100 },
+				default: 50,
+				description: 'How many older messages to ask WhatsApp for (1-100). The reply is asynchronous: wait a few seconds, then use Message > List. Repeat to page further back.',
+				displayOptions: { show: { resource: ['message'], operation: ['requestHistory'] } },
 			},
 			{
 				displayName: 'Search Query',
@@ -676,6 +686,14 @@ export class Velix implements INodeType {
 						case 'search':
 							endpoint = `/instances/${id}/messages/search?q=${encodeURIComponent(this.getNodeParameter('searchQuery', i) as string)}` +
 								`&limit=${this.getNodeParameter('limit', i, 50)}&offset=${this.getNodeParameter('offset', i, 0)}`;
+							break;
+						case 'requestHistory':
+							method = 'POST';
+							endpoint = `/instances/${id}/messages/history`;
+							body = {
+								chat:  this.getNodeParameter('chatJid', i),
+								count: this.getNodeParameter('historyCount', i, 50),
+							};
 							break;
 						case 'listScheduled':
 							endpoint = `/instances/${id}/messages/scheduled`;
