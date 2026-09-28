@@ -64,15 +64,23 @@ export class VelixTrigger implements INodeType {
 		const eventFilter = this.getNodeParameter('event') as string;
 		const instanceFilter = this.getNodeParameter('instanceFilter') as string;
 
+		// Events filtered out still need an HTTP answer: `noWebhookResponse` tells
+		// n8n the node replies on its own, and without a reply the Velix delivery
+		// hangs until it times out and gets retried (and logged as failed).
+		const ignore = (reason: string): IWebhookResponseData => {
+			this.getResponseObject().status(200).json({ ok: true, ignored: reason });
+			return { noWebhookResponse: true };
+		};
+
 		// Filter by event type.
 		const eventType = body.event as string | undefined;
 		if (eventFilter !== '*' && eventType !== eventFilter) {
-			return { noWebhookResponse: true };
+			return ignore('event');
 		}
 
 		// Filter by instance ID.
 		if (instanceFilter && body.instance_id !== instanceFilter) {
-			return { noWebhookResponse: true };
+			return ignore('instance');
 		}
 
 		return {
